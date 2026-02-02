@@ -86,8 +86,17 @@ TEST SUMMARY: 8 passed, 0 failed
 
 🎉 ALL TESTS PASSED!
 ```
+### Testing on my Local Machine (To Verifify results (Paranoid Engineering)
+---<img width="1893" height="1012" alt="image" src="https://github.com/user-attachments/assets/0aa4fe63-6c72-4873-8892-9cb6dcc314f9" />
+<img width="1876" height="992" alt="image" src="https://github.com/user-attachments/assets/ec9a9693-53c5-4d06-8b58-9aacc6c9e788" />
+<img width="1822" height="975" alt="image" src="https://github.com/user-attachments/assets/dbc12885-85c3-4ab9-a1a8-32e7b87b159d" />
+<img width="1898" height="1049" alt="image" src="https://github.com/user-attachments/assets/3db9f61a-445b-4a48-9761-e2095f32a9fb" />
+<img width="1865" height="933" alt="image" src="https://github.com/user-attachments/assets/2874c9c5-0d93-4575-a3ae-01fa2f96d8e5" />
+<img width="1916" height="1022" alt="image" src="https://github.com/user-attachments/assets/0a96c335-55d6-46fb-bbbf-221823ec3cdf" />
+![Uploading image.png…]()
+![Uploading image.png…]()
 
----
+
 
 ## 🏗️ Architecture
 
