@@ -8,12 +8,93 @@ At Propy, we can't just trust an LLM to be right. If an AI hallucinates a number
 
 > **Use AI for what it's good at (parsing messy text), use CODE for what it's good at (logical validation).**
 
+---
+
+## 📝 Development Process & Methodology
+
+### My Prompt to Claude:
+
+> *"Iteratively (with thorough testing in a python environment to ensure success against multiple test cases) Develop a small Python script (or API) that takes a messy, OCR-scanned deed, cleans it up using an LLM, and then rigorously validates it with code before accepting it. Take as long as you need and show your work and thought process. Give me the resulting python script (use your own output as a stub for the llm api call for now)"*
+
+### Step 1: Creating the Prompt to Generate Initial Prototype
+
+I figured I should use a combination of **metaprompting**—an AI technique where large language models (LLMs) are used to create, refine, and optimize prompts for other tasks—and **agile methodology** (iterative, documented development, with communication prioritized) in lieu of traditional documentation. 
+
+I included the original problem document (the PDF with the technical task), which allowed the AI-generated result to take in context:
+- The original problem statement
+- What deliverables were expected
+- The specific test case with intentional errors
+
+This led Claude to produce not just code, but also a comprehensive README and test suite.
+
+### Step 2: Iterative Development with Testing
+
+The development followed this cycle:
+
+```
+┌─────────────────┐
+│  Write Code     │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Run Tests      │──────┐
+└────────┬────────┘      │
+         │               │ Failed
+         │ Passed        │
+         ▼               ▼
+┌─────────────────┐  ┌─────────────────┐
+│  Add Edge Cases │  │  Debug & Fix    │
+└────────┬────────┘  └────────┬────────┘
+         │                    │
+         └────────────────────┘
+```
+
+**Key iterations included:**
+1. Initial prototype with stubbed LLM extraction
+2. Building the word-to-number converter (custom, no dependencies)
+3. Creating the county abbreviation matcher
+4. Implementing date logic validation
+5. Adding amount discrepancy detection
+6. Comprehensive test suite (8 tests, all passing)
+7. Live API integration with Anthropic Claude
+
+### Step 3: Key Design Decisions Made During Development
+
+| Decision | Reasoning |
+|----------|-----------|
+| **Stub the LLM first** | Allows testing validation logic without API costs/latency |
+| **Custom word-to-number** | No external dependencies, full control over edge cases |
+| **Explicit abbreviation map** | More predictable than fuzzy matching for legal documents |
+| **Specific exception classes** | Clear error messages for debugging and audit trails |
+| **Configurable extraction function** | Easy to swap between stub/live without code changes |
+
+### Step 4: Final Testing & Verification
+
+```
+======================================================================
+TEST SUMMARY: 8 passed, 0 failed
+======================================================================
+✓ TEST 1: Main "bad deed" - catches both date and amount errors
+✓ TEST 2: Word-to-number conversion (50 → 2 billion range)
+✓ TEST 3: County abbreviation matching (S. Clara → Santa Clara)
+✓ TEST 4: Date sequence validation (valid/invalid/same-day)
+✓ TEST 5: Amount validation (match/mismatch detection)
+✓ TEST 6: Additional word-to-number edge cases
+✓ TEST 7: County not found error handling
+✓ TEST 8: Valid deed processing
+
+🎉 ALL TESTS PASSED!
+```
+
+---
+
 ## 🏗️ Architecture
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │   Raw OCR Text  │────▶│  LLM Extraction │────▶│ Code Validation │
-│   (Messy)       │     │  (Parsing)      │     │  (Paranoid)     │
+│   (Messy)       │     │  (Claude API)   │     │  (Paranoid)     │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
                               │                        │
                               │                        ▼
@@ -66,28 +147,55 @@ The OCR text says `"S. Clara"`, but our database knows it as `"Santa Clara"`.
 - Case-insensitive matching
 - Substring matching for robustness
 
+---
+
 ## 🚀 Quick Start
 
+### Using the Stubbed Version (No API Key Needed)
 ```bash
-# Run the validator with test suite
+# Run with test suite
 python deed_validator.py
-
-# Run as API (requires Flask)
-pip install flask
-python api.py
 ```
+
+### Using the Live Version (Requires API Key)
+```bash
+# Option 1: Set environment variable
+export ANTHROPIC_API_KEY="sk-ant-api03-..."
+python deed_validator_live.py
+
+# Option 2: Edit the file directly (line 23)
+# ANTHROPIC_API_KEY = "sk-ant-api03-YOUR-KEY-HERE"
+python deed_validator_live.py
+```
+
+### Running Tests
+```bash
+python test_validator.py
+```
+
+---
 
 ## 📁 Project Structure
 
 ```
 deed_validator/
-├── deed_validator.py    # Main validation logic
-├── counties.json        # Reference data (tax rates)
-├── api.py              # Optional Flask API
-└── README.md           # This file
+├── deed_validator.py       # Stubbed version (for testing without API)
+├── deed_validator_live.py  # Live version with Anthropic API
+├── test_validator.py       # Comprehensive test suite
+├── api.py                  # Optional Flask API wrapper
+├── counties.json           # Reference data (county tax rates)
+└── README.md               # This file
 ```
 
-## 🔌 API Usage
+---
+
+## 🔌 API Usage (Optional)
+
+### Start the Server
+```bash
+pip install flask
+python api.py
+```
 
 ### Endpoint: `POST /validate`
 
@@ -117,20 +225,50 @@ curl -X POST http://localhost:5000/validate \
 }
 ```
 
-## 🧪 Test Cases
+---
 
-The validator includes comprehensive tests:
+## 🎓 Engineering Hygiene: Answering the Review Questions
 
-| Test | Description | Status |
-|------|-------------|--------|
-| 1 | Main "bad deed" validation | ✅ Catches both errors |
-| 2 | Word-to-number conversion | ✅ All edge cases pass |
-| 3 | County abbreviation matching | ✅ All variations handled |
-| 4 | Date sequence validation | ✅ Valid/invalid/same-day |
-| 5 | Amount validation | ✅ Match/mismatch detection |
-| 6 | Word-to-number edge cases | ✅ 50-2B range covered |
-| 7 | County not found handling | ✅ Specific error raised |
-| 8 | Valid deed processing | ✅ Passes validation |
+### Q: What did you use to catch the date error?
+**A:** Pure Python `datetime` comparison. The LLM extracts the dates as strings, but the validation is done entirely in code:
+```python
+signed = datetime.strptime(signed_date, '%Y-%m-%d')
+recorded = datetime.strptime(recorded_date, '%Y-%m-%d')
+if recorded < signed:
+    raise DateLogicError(...)
+```
+This is deterministic and will **always** catch impossible date sequences, unlike an LLM which might miss subtle issues.
+
+### Q: How did you handle the "S. Clara" lookup?
+**A:** Built an explicit abbreviation map during initialization:
+```python
+# For "Santa Clara", we generate:
+abbrev_map["santa clara"] = "Santa Clara"
+abbrev_map["s. clara"] = "Santa Clara"
+abbrev_map["s clara"] = "Santa Clara"
+abbrev_map["sta. clara"] = "Santa Clara"
+```
+This is more predictable than fuzzy matching for legal/financial documents where precision matters.
+
+### Q: Is your code structured well?
+**A:** Yes, following separation of concerns:
+- **Custom exceptions** for specific error types (`DateLogicError`, `AmountDiscrepancyError`, `CountyNotFoundError`)
+- **Data classes** for structured data (`DeedData`, `ValidationResult`)
+- **Single-responsibility classes** (`WordToNumberConverter`, `CountyMatcher`, `DateValidator`, `AmountValidator`)
+- **Configurable main validator** (`DeedValidator`) that orchestrates the workflow
+- **Comprehensive test suite** with 8 test cases covering all edge cases
+
+---
+
+## 📋 Error Types
+
+| Error Class | Trigger | Message Format |
+|-------------|---------|----------------|
+| `DateLogicError` | recorded < signed | "IMPOSSIBLE DATE SEQUENCE: ..." |
+| `AmountDiscrepancyError` | numeric ≠ written | "AMOUNT MISMATCH: ... Discrepancy: $X" |
+| `CountyNotFoundError` | No match in DB | "COUNTY NOT FOUND: ... Available: ..." |
+
+---
 
 ## 🔧 Customization
 
@@ -145,59 +283,19 @@ Edit `counties.json`:
 ]
 ```
 
-### Integrating Real LLM
-
-Replace the stubbed `extract_deed_with_llm()` function:
+### Switching Between Stub and Live
 
 ```python
-import anthropic
+# Stubbed (no API needed)
+from deed_validator import DeedValidator
+validator = DeedValidator()
 
-def extract_deed_with_llm(raw_text: str) -> dict:
-    client = anthropic.Anthropic()
-    
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
-        messages=[{
-            "role": "user", 
-            "content": f"""Extract the following fields from this deed text as JSON:
-            - doc_number, county, state, date_signed, date_recorded
-            - grantor, grantee, amount_numeric, amount_written, apn, status
-            
-            Text:
-            {raw_text}
-            """
-        }]
-    )
-    
-    return json.loads(response.content[0].text)
+# Live (requires API key)
+from deed_validator_live import DeedValidator
+validator = DeedValidator(api_key="sk-ant-api03-...")
 ```
 
-## 🎓 Key Design Decisions
-
-### Why not use AI for validation?
-
-1. **Dates**: LLMs can't reliably detect impossible sequences without explicit prompting
-2. **Math**: LLMs frequently make arithmetic errors, especially with large numbers
-3. **Determinism**: Code always catches these errors; AI might not
-
-### Why use AI for extraction?
-
-1. **Messy text handling**: LLMs excel at parsing unstructured, OCR-error-prone text
-2. **Flexibility**: Handles variations in format without brittle regex
-3. **Entity recognition**: Correctly parses "T.E.S.L.A. Holdings LLC" without custom rules
-
-### County matching approach
-
-Rather than fuzzy string matching (which could match "S. Clara" to wrong counties), we use an explicit abbreviation map. This is more predictable and auditable for financial documents.
-
-## 📋 Error Types
-
-| Error Class | Trigger | Message Format |
-|-------------|---------|----------------|
-| `DateLogicError` | recorded < signed | "IMPOSSIBLE DATE SEQUENCE: ..." |
-| `AmountDiscrepancyError` | numeric ≠ written | "AMOUNT MISMATCH: ... Discrepancy: $X" |
-| `CountyNotFoundError` | No match in DB | "COUNTY NOT FOUND: ... Available: ..." |
+---
 
 ## 📜 License
 
@@ -207,5 +305,5 @@ MIT
 
 1. Fork the repository
 2. Add your feature/fix
-3. Ensure all tests pass: `python deed_validator.py`
+3. Ensure all tests pass: `python test_validator.py`
 4. Submit a PR
