@@ -86,7 +86,7 @@ TEST SUMMARY: 8 passed, 0 failed
 
 🎉 ALL TESTS PASSED!
 ```
-### Testing on my Local Machine (To Verifify results (Paranoid Engineering)
+### Testing on my Own Machine in IDE + Python Environment To Verify Results (Paranoid Engineering)
 ---<img width="1893" height="1012" alt="image" src="https://github.com/user-attachments/assets/0aa4fe63-6c72-4873-8892-9cb6dcc314f9" />
 <img width="1876" height="992" alt="image" src="https://github.com/user-attachments/assets/ec9a9693-53c5-4d06-8b58-9aacc6c9e788" />
 <img width="1822" height="975" alt="image" src="https://github.com/user-attachments/assets/dbc12885-85c3-4ab9-a1a8-32e7b87b159d" />
