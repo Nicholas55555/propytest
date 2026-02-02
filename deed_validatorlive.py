@@ -1,12 +1,10 @@
 """
-Bad Deed Validator - Propy Technical Task
-==========================================
+Bad Deed Validator - LIVE VERSION with Real LLM API
+====================================================
 A paranoid engineering approach to validating OCR-scanned deeds.
 
-This script:
-1. Extracts data using an LLM (stubbed for testing)
-2. Enriches data by matching abbreviated county names
-3. Performs rigorous sanity checks on dates and amounts
+This version uses the real Anthropic API for extraction,
+then validates everything with deterministic code.
 """
 
 import json
@@ -15,6 +13,16 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional, List
 from pathlib import Path
+
+import anthropic
+
+# =============================================================================
+# CONFIGURATION - API KEY
+# =============================================================================
+
+# IMPORTANT: In production, use environment variables!
+# export ANTHROPIC_API_KEY="your-key-here"
+ANTHROPIC_API_KEY = "YOUR_API_KEY_HERE"  # <-- Replace with your actual key
 
 
 # =============================================================================
@@ -233,12 +241,10 @@ class CountyMatcher:
                     return county['name'], county['tax_rate']
         
         # Fuzzy matching - check if any county name contains the search term
-        # or if the search term contains part of a county name
         for county in self.counties:
             county_name = county['name']
             county_lower = county_name.lower()
             
-            # Check if normalized text is substring of county name (minus punctuation)
             search_clean = re.sub(r'[^a-z\s]', '', normalized)
             
             for word in search_clean.split():
@@ -298,7 +304,6 @@ class AmountValidator:
     
     def parse_numeric_amount(self, amount_str: str) -> float:
         """Parse a numeric amount string like '$1,250,000.00' to float."""
-        # Remove currency symbols, commas, and whitespace
         cleaned = re.sub(r'[$,\s]', '', amount_str)
         return float(cleaned)
     
@@ -325,7 +330,6 @@ class AmountValidator:
         numeric_amount = self.parse_numeric_amount(numeric_str)
         written_amount = self.parse_written_amount(written_str)
         
-        # Check if amounts match within tolerance
         if numeric_amount == 0:
             if written_amount != 0:
                 raise AmountDiscrepancyError(numeric_amount, written_amount, written_str)
@@ -338,45 +342,71 @@ class AmountValidator:
 
 
 # =============================================================================
-# LLM EXTRACTION (Stubbed)
+# REAL LLM EXTRACTION - Using Anthropic API
 # =============================================================================
 
-def extract_deed_with_llm(raw_text: str) -> dict:
+def extract_deed_with_llm(raw_text: str, api_key: str = None) -> dict:
     """
-    Extract structured data from raw OCR text using an LLM.
+    Extract structured data from raw OCR text using Claude API.
     
-    In production, this would call OpenAI/Anthropic API.
-    For this implementation, we're using a stubbed response that simulates
-    what the LLM would return.
-    
-    The key point: We don't TRUST this output. We validate everything afterwards.
+    This is the "fuzzy" part - we trust the LLM to parse messy text.
+    But we DON'T trust it for validation - that happens in code.
     """
-    # =========================================================================
-    # STUBBED LLM RESPONSE
-    # In production, replace this with actual API call:
-    #
-    # response = anthropic.messages.create(
-    #     model="claude-sonnet-4-20250514",
-    #     messages=[{"role": "user", "content": EXTRACTION_PROMPT + raw_text}],
-    # )
-    # return json.loads(response.content[0].text)
-    # =========================================================================
     
-    # This simulates what the LLM would extract from the messy OCR text
-    # The LLM is good at parsing, but we can't trust it for validation
-    return {
-        "doc_number": "DEED-TRUST-0042",
-        "county": "S. Clara",  # LLM preserves the abbreviation - we handle normalization
-        "state": "CA",
-        "date_signed": "2024-01-15",
-        "date_recorded": "2024-01-10",  # LLM extracts what it sees - validation catches the error
-        "grantor": "T.E.S.L.A. Holdings LLC",
-        "grantee": "John & Sarah Connor",
-        "amount_numeric": "$1,250,000.00",
-        "amount_written": "One Million Two Hundred Thousand Dollars",  # LLM extracts as-is
-        "apn": "992-001-XA",
-        "status": "PRELIMINARY"
-    }
+    # Use provided key or fall back to global/env
+    key = api_key or ANTHROPIC_API_KEY
+    if key == "YOUR_API_KEY_HERE":
+        # Try environment variable
+        import os
+        key = os.environ.get("ANTHROPIC_API_KEY")
+        if not key:
+            raise ValueError("No API key provided. Set ANTHROPIC_API_KEY or pass api_key parameter.")
+    
+    client = anthropic.Anthropic(api_key=key)
+    
+    extraction_prompt = """Extract the following fields from this OCR-scanned deed text and return them as a JSON object.
+
+Fields to extract:
+- doc_number: The document number/ID
+- county: The county name (keep abbreviations as-is, e.g., "S. Clara")
+- state: The state abbreviation
+- date_signed: The date the document was signed (format: YYYY-MM-DD)
+- date_recorded: The date the document was recorded (format: YYYY-MM-DD)
+- grantor: The grantor (seller) name
+- grantee: The grantee (buyer) name(s)
+- amount_numeric: The dollar amount in numeric form (e.g., "$1,250,000.00")
+- amount_written: The dollar amount written in words (e.g., "One Million Two Hundred Thousand Dollars")
+- apn: The Assessor's Parcel Number
+- status: The document status
+
+Return ONLY valid JSON, no markdown, no explanation. Example format:
+{"doc_number": "...", "county": "...", ...}
+
+Here is the deed text to parse:
+
+"""
+    
+    message = client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=1024,
+        messages=[
+            {
+                "role": "user",
+                "content": extraction_prompt + raw_text
+            }
+        ]
+    )
+    
+    # Parse the response
+    response_text = message.content[0].text.strip()
+    
+    # Handle potential markdown code blocks
+    if response_text.startswith("```"):
+        # Remove markdown code block
+        lines = response_text.split("\n")
+        response_text = "\n".join(lines[1:-1])
+    
+    return json.loads(response_text)
 
 
 # =============================================================================
@@ -394,21 +424,20 @@ class DeedValidator:
     """
     
     def __init__(self, counties_file: str = "counties.json", 
-                 extraction_fn: callable = None,
+                 api_key: str = None,
                  verbose: bool = True):
         """
         Initialize the deed validator.
         
         Args:
             counties_file: Path to the counties JSON reference file
-            extraction_fn: Optional custom extraction function. If not provided,
-                          uses the default stubbed extraction.
+            api_key: Anthropic API key (optional, uses env var if not provided)
             verbose: If True, prints detailed validation steps
         """
         self.county_matcher = CountyMatcher(counties_file)
         self.date_validator = DateValidator()
         self.amount_validator = AmountValidator()
-        self.extraction_fn = extraction_fn or extract_deed_with_llm
+        self.api_key = api_key
         self.verbose = verbose
     
     def validate(self, raw_ocr_text: str) -> ValidationResult:
@@ -425,10 +454,10 @@ class DeedValidator:
         # Step 1: Extract data using LLM
         if self.verbose:
             print("=" * 60)
-            print("STEP 1: LLM EXTRACTION")
+            print("STEP 1: LLM EXTRACTION (Using Claude API)")
             print("=" * 60)
         try:
-            extracted = self.extraction_fn(raw_ocr_text)
+            extracted = extract_deed_with_llm(raw_ocr_text, self.api_key)
             if self.verbose:
                 print(f"Extracted data: {json.dumps(extracted, indent=2)}")
         except Exception as e:
@@ -454,7 +483,7 @@ class DeedValidator:
         # Step 3: Validate dates (CODE-BASED - Don't trust LLM for date logic!)
         if self.verbose:
             print("\n" + "=" * 60)
-            print("STEP 3: DATE VALIDATION (Code-based)")
+            print("STEP 3: DATE VALIDATION (Code-based, NOT AI)")
             print("=" * 60)
         try:
             self.date_validator.validate_date_sequence(
@@ -471,7 +500,7 @@ class DeedValidator:
         # Step 4: Validate amounts (CODE-BASED - Don't trust LLM for math!)
         if self.verbose:
             print("\n" + "=" * 60)
-            print("STEP 4: AMOUNT VALIDATION (Code-based)")
+            print("STEP 4: AMOUNT VALIDATION (Code-based, NOT AI)")
             print("=" * 60)
         written_parsed = None
         try:
@@ -541,277 +570,10 @@ class DeedValidator:
 
 
 # =============================================================================
-# TEST CASES
-# =============================================================================
-
-def run_tests(verbose: bool = True):
-    """Run comprehensive test cases."""
-    
-    if verbose:
-        print("\n" + "#" * 70)
-        print("# TEST SUITE")
-        print("#" * 70)
-    
-    # The original messy OCR text from the task
-    MESSY_OCR_TEXT = """*** RECORDING REQ ***
-Doc: DEED-TRUST-0042
-County: S. Clara | State: CA
-Date Signed: 2024-01-15
-Date Recorded: 2024-01-10
-
-Grantor: T.E.S.L.A. Holdings LLC
-Grantee: John & Sarah Connor
-
-Amount: $1,250,000.00 (One Million Two Hundred Thousand Dollars)
-APN: 992-001-XA
-Status: PRELIMINARY
-*** END ***"""
-
-    # Test 1: Main validation (should catch both errors)
-    if verbose:
-        print("\n" + "=" * 70)
-        print("TEST 1: Validate the 'bad' deed (should catch 2 errors)")
-        print("=" * 70)
-    
-    validator = DeedValidator()
-    result = validator.validate(MESSY_OCR_TEXT)
-    
-    assert not result.is_valid, "TEST 1 FAILED: Deed should be invalid"
-    assert len(result.errors) == 2, f"TEST 1 FAILED: Expected 2 errors, got {len(result.errors)}"
-    assert any("DATE" in e or "recorded" in e.lower() for e in result.errors), \
-        "TEST 1 FAILED: Should have date error"
-    assert any("AMOUNT" in e or "MISMATCH" in e for e in result.errors), \
-        "TEST 1 FAILED: Should have amount error"
-    if verbose:
-        print("\n✓ TEST 1 PASSED: Both errors detected correctly")
-    
-    # Test 2: Word to number conversion
-    if verbose:
-        print("\n" + "=" * 70)
-        print("TEST 2: Word to Number Conversion")
-        print("=" * 70)
-    
-    converter = WordToNumberConverter()
-    
-    test_cases = [
-        ("One Million Two Hundred Thousand Dollars", 1_200_000),
-        ("One Million Two Hundred Fifty Thousand Dollars", 1_250_000),
-        ("Five Hundred Thousand Dollars", 500_000),
-        ("One Hundred Twenty Three Thousand Four Hundred Fifty Six Dollars", 123_456),
-        ("One Million Dollars", 1_000_000),
-        ("Two Billion Dollars", 2_000_000_000),
-    ]
-    
-    for text, expected in test_cases:
-        result = converter.convert(text)
-        status = "✓" if result == expected else "✗"
-        if verbose:
-            print(f"{status} '{text}' -> {result:,.0f} (expected {expected:,})")
-        assert result == expected, f"Conversion failed for '{text}'"
-    
-    if verbose:
-        print("\n✓ TEST 2 PASSED: All word-to-number conversions correct")
-    
-    # Test 3: County matching
-    if verbose:
-        print("\n" + "=" * 70)
-        print("TEST 3: County Matching")
-        print("=" * 70)
-    
-    matcher = CountyMatcher()
-    
-    county_tests = [
-        ("S. Clara", "Santa Clara"),
-        ("Santa Clara", "Santa Clara"),
-        ("S. Mateo", "San Mateo"),
-        ("San Mateo", "San Mateo"),
-        ("S. Cruz", "Santa Cruz"),
-        ("santa clara", "Santa Clara"),  # Case insensitive
-    ]
-    
-    for input_name, expected in county_tests:
-        name, rate = matcher.match(input_name)
-        status = "✓" if name == expected else "✗"
-        if verbose:
-            print(f"{status} '{input_name}' -> '{name}' (expected '{expected}')")
-        assert name == expected, f"Match failed for '{input_name}'"
-    
-    if verbose:
-        print("\n✓ TEST 3 PASSED: All county matches correct")
-    
-    # Test 4: Date validation
-    if verbose:
-        print("\n" + "=" * 70)
-        print("TEST 4: Date Validation")
-        print("=" * 70)
-    
-    date_validator = DateValidator()
-    
-    # Valid date sequence
-    try:
-        date_validator.validate_date_sequence("2024-01-10", "2024-01-15")
-        if verbose:
-            print("✓ Valid sequence (signed before recorded) - passed")
-    except DateLogicError:
-        assert False, "Should not raise error for valid sequence"
-    
-    # Same day - should be valid
-    try:
-        date_validator.validate_date_sequence("2024-01-10", "2024-01-10")
-        if verbose:
-            print("✓ Same day signing and recording - passed")
-    except DateLogicError:
-        assert False, "Should not raise error for same-day"
-    
-    # Invalid sequence (recorded before signed)
-    try:
-        date_validator.validate_date_sequence("2024-01-15", "2024-01-10")
-        assert False, "Should have raised DateLogicError"
-    except DateLogicError as e:
-        if verbose:
-            print(f"✓ Invalid sequence detected: {e.signed_date} signed, {e.recorded_date} recorded")
-    
-    if verbose:
-        print("\n✓ TEST 4 PASSED: Date validation working correctly")
-    
-    # Test 5: Amount validation
-    if verbose:
-        print("\n" + "=" * 70)
-        print("TEST 5: Amount Validation")
-        print("=" * 70)
-    
-    amount_validator = AmountValidator()
-    
-    # Matching amounts
-    try:
-        result = amount_validator.validate_amounts(
-            "$1,250,000.00",
-            "One Million Two Hundred Fifty Thousand Dollars"
-        )
-        if verbose:
-            print(f"✓ Matching amounts validated: ${result:,.2f}")
-    except AmountDiscrepancyError:
-        assert False, "Should not raise error for matching amounts"
-    
-    # Mismatched amounts (the original error case)
-    try:
-        amount_validator.validate_amounts(
-            "$1,250,000.00",
-            "One Million Two Hundred Thousand Dollars"  # Missing "Fifty" = $50k discrepancy
-        )
-        assert False, "Should have raised AmountDiscrepancyError"
-    except AmountDiscrepancyError as e:
-        if verbose:
-            print(f"✓ Mismatch detected: ${e.numeric_amount:,.2f} vs ${e.written_amount:,.2f}")
-        discrepancy = abs(e.numeric_amount - e.written_amount)
-        assert discrepancy == 50_000, f"Expected $50k discrepancy, got ${discrepancy:,.2f}"
-        if verbose:
-            print(f"✓ Discrepancy correctly identified as ${discrepancy:,.2f}")
-    
-    if verbose:
-        print("\n✓ TEST 5 PASSED: Amount validation working correctly")
-    
-    # Test 6: Edge cases for word to number
-    if verbose:
-        print("\n" + "=" * 70)
-        print("TEST 6: Additional Word-to-Number Edge Cases")
-        print("=" * 70)
-    
-    edge_cases = [
-        ("Fifty Dollars", 50),
-        ("Nine Hundred Ninety Nine Dollars", 999),
-        ("Twelve Thousand Dollars", 12_000),
-        ("One Hundred Dollars", 100),
-        ("Twenty One Thousand Dollars", 21_000),
-        ("Three Hundred Forty Five Thousand Six Hundred Seventy Eight Dollars", 345_678),
-    ]
-    
-    for text, expected in edge_cases:
-        result = converter.convert(text)
-        status = "✓" if result == expected else "✗"
-        if verbose:
-            print(f"{status} '{text}' -> {result:,.0f} (expected {expected:,})")
-        assert result == expected, f"Conversion failed for '{text}'"
-    
-    if verbose:
-        print("\n✓ TEST 6 PASSED: Edge cases handled correctly")
-    
-    # Test 7: County not found error
-    if verbose:
-        print("\n" + "=" * 70)
-        print("TEST 7: County Not Found Error Handling")
-        print("=" * 70)
-    
-    try:
-        matcher.match("Unknown County")
-        assert False, "Should have raised CountyNotFoundError"
-    except CountyNotFoundError as e:
-        if verbose:
-            print(f"✓ Unknown county correctly raised error: {e.county_text}")
-        assert "Unknown County" in str(e)
-    
-    if verbose:
-        print("\n✓ TEST 7 PASSED: County not found error works correctly")
-    
-    # Test 8: Valid deed (no errors) - using configurable extraction
-    if verbose:
-        print("\n" + "=" * 70)
-        print("TEST 8: Valid Deed (No Errors)")
-        print("=" * 70)
-    
-    # Define a mock extraction function that returns valid data
-    def mock_valid_extract(raw_text: str) -> dict:
-        return {
-            "doc_number": "DEED-VALID-001",
-            "county": "San Mateo",
-            "state": "CA",
-            "date_signed": "2024-01-10",  # Signed BEFORE recorded - correct!
-            "date_recorded": "2024-01-15",
-            "grantor": "Valid Seller LLC",
-            "grantee": "Valid Buyer",
-            "amount_numeric": "$500,000.00",
-            "amount_written": "Five Hundred Thousand Dollars",  # Matches!
-            "apn": "123-456-78",
-            "status": "FINAL"
-        }
-    
-    # Create validator with custom extraction function
-    valid_validator = DeedValidator(extraction_fn=mock_valid_extract, verbose=False)
-    result_valid = valid_validator.validate("mock input")
-    
-    assert result_valid.is_valid, f"TEST 8 FAILED: Valid deed should pass. Errors: {result_valid.errors}"
-    assert len(result_valid.errors) == 0, f"TEST 8 FAILED: Expected 0 errors, got {len(result_valid.errors)}"
-    assert result_valid.deed_data.county_normalized == "San Mateo"
-    assert result_valid.deed_data.tax_rate == 0.011
-    
-    if verbose:
-        print(f"✓ Valid deed passed validation")
-        print(f"✓ County matched: {result_valid.deed_data.county_normalized}")
-        print(f"✓ Tax rate: {result_valid.deed_data.tax_rate}")
-        print(f"✓ Closing costs: ${result_valid.deed_data.closing_costs:,.2f}")
-        print("\n✓ TEST 8 PASSED: Valid deed processed correctly")
-    
-    if verbose:
-        print("\n" + "#" * 70)
-        print("# ALL TESTS PASSED!")
-        print("#" * 70)
-    
-    return True
-
-
-# =============================================================================
 # MAIN ENTRY POINT
 # =============================================================================
 
 if __name__ == "__main__":
-    # Run the test suite
-    run_tests()
-    
-    print("\n\n")
-    print("=" * 70)
-    print("DEMONSTRATION: Processing the 'Bad' Deed")
-    print("=" * 70)
-    
     # The exact messy OCR text from the task
     RAW_OCR_TEXT = """*** RECORDING REQ ***
 Doc: DEED-TRUST-0042
@@ -827,6 +589,22 @@ APN: 992-001-XA
 Status: PRELIMINARY
 *** END ***"""
 
+    print("=" * 70)
+    print("BAD DEED VALIDATOR - LIVE VERSION")
+    print("Using Real Claude API for Extraction")
+    print("=" * 70)
+    print()
+    print("Input OCR Text:")
+    print("-" * 40)
+    print(RAW_OCR_TEXT)
+    print("-" * 40)
+    print()
+    
+    # Create validator and run
+    # Option 1: Use hardcoded key (replace above)
+    # Option 2: Use environment variable: export ANTHROPIC_API_KEY="sk-..."
+    # Option 3: Pass directly: DeedValidator(api_key="sk-...")
+    
     validator = DeedValidator()
     result = validator.validate(RAW_OCR_TEXT)
     
@@ -836,7 +614,7 @@ Status: PRELIMINARY
     print(f"Valid: {result.is_valid}")
     print(f"Errors: {result.errors}")
     if result.deed_data:
-        print(f"\nExtracted Data:")
+        print(f"\nExtracted & Enriched Data:")
         print(f"  Document: {result.deed_data.doc_number}")
         print(f"  County: {result.deed_data.county} -> {result.deed_data.county_normalized}")
         print(f"  Tax Rate: {result.deed_data.tax_rate}")
