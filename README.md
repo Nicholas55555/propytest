@@ -18,7 +18,7 @@ At Propy, we can't just trust an LLM to be right. If an AI hallucinates a number
 
 ### Step 1: Creating the Prompt to Generate Initial Prototype
 
-While the initial development utilized **metaprompting** and **agile** iteration, the final deliverable is more accurately defined as an **Agentic Workflow Architecture**. The project moves beyond simple "input-output" AI interactions by creating a closed-loop system between probabilistic AI and deterministic code.
+While the initial development utilized **metaprompting** and **agile iteration**, the final deliverable is more accurately defined as an **Agentic Workflow Architecture**. The project moves beyond simple "input-output" AI interactions by creating a closed-loop system between probabilistic AI and deterministic code.
 
 Key Components of the Architecture
 The Reasoning Engine (LLM): Tasked with high-level cognitive work—parsing "messy" OCR text where traditional regex or template-based parsing would fail.
