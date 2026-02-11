@@ -18,14 +18,14 @@ At Propy, we can't just trust an LLM to be right. If an AI hallucinates a number
 
 ### Step 1: Creating the Prompt to Generate Initial Prototype
 
-I figured I should use a combination of **metaprompting**—an AI technique where large language models (LLMs) are used to create, refine, and optimize prompts for other tasks—and **agile methodology** (iterative, documented development, with communication prioritized) in lieu of traditional documentation. 
+While the initial development utilized **metaprompting** and **agile** iteration, the final deliverable is more accurately defined as an **Agentic Workflow Architecture**. The project moves beyond simple "input-output" AI interactions by creating a closed-loop system between probabilistic AI and deterministic code.
 
-I included the original problem document (the PDF with the technical task), which allowed the AI-generated result to take in context:
-- The original problem statement
-- What deliverables were expected
-- The specific test case with intentional errors
+Key Components of the Architecture
+The Reasoning Engine (LLM): Tasked with high-level cognitive work—parsing "messy" OCR text where traditional regex or template-based parsing would fail.
 
-This led Claude to produce not just code, but also a comprehensive README and test suite.
+The Execution Sandbox (Python): A live environment where the agent's output is immediately subjected to a "Paranoid Engineering" validation suite.
+
+The Feedback Loop: Rather than accepting the first result, the architecture uses a Self-Correction Loop. If the Python validator catches a logical error (like the date discrepancy), that feedback can be fed back into the system to refine the extraction.
 
 ### Step 2: Iterative Development with Testing
 
